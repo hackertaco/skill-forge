@@ -1,19 +1,54 @@
 # skill-forge
 
-내가 만들고 다듬는 Claude Code 스킬 모음. 대장간(forge)에서 망치질하듯 깎아낸 스킬들을 모아두는 레포.
+내가 만들고 다듬는 AI CLI 스킬 모음. 대장간(forge)에서 망치질하듯 깎아낸 스킬들을 모아두는 레포.
+
+**Claude Code, OpenAI Codex, Gemini CLI 모두에서 동작.** 스킬은 bash 기반이라 어떤 환경에서도 호출 가능하고, Stage 4(LLM 검토)는 `claude` / `codex` / `gemini` 중 설치된 CLI를 자동 감지해서 호출합니다.
+
+## Quickstart — 다른 사람이 쓰는 법
+
+```bash
+# 클론 + 심볼릭 링크
+git clone https://github.com/hackertaco/skill-forge.git ~/skill-forge
+ln -s ~/skill-forge/slide-ko-polish ~/.claude/skills/slide-ko-polish
+
+# Claude 유저 (자동 감지: claude 우선)
+~/.claude/skills/slide-ko-polish/verify.sh slide.html
+
+# Codex 유저
+LLM_CLI=codex ~/skill-forge/slide-ko-polish/verify.sh slide.html
+
+# Gemini 유저
+LLM_CLI=gemini ~/skill-forge/slide-ko-polish/verify.sh slide.html
+```
+
+bash 스크립트라 심볼릭 링크 안 걸어도 절대 경로로 그냥 호출 가능. `LLM_CLI` 환경변수는 자동 감지 우선순위(`claude → codex → gemini`)를 무시하고 강제 지정.
+
+## 지원 환경
+
+| 환경 | 동작 |
+|---|---|
+| **Claude Code** | 트리거 키워드("발표자료 다듬어" 등) 또는 `/slide-ko-polish` 슬래시 명령으로 호출. SKILL.md 자동 로드. |
+| **OpenAI Codex CLI** | `~/skill-forge/slide-ko-polish/verify.sh slide.html` 직접 호출. Stage 4가 `codex exec` 사용. |
+| **Gemini CLI** | 동일하게 직접 호출. Stage 4가 `gemini --non-interactive` 사용. |
+| **모든 환경** (LLM CLI 없어도) | Stage 1·1.5(regex/구조 검증)는 LLM 없이 동작. Stage 4만 건너뜀. |
 
 ## 설치 방법
 
-각 스킬은 독립적으로 동작합니다. 원하는 스킬만 골라서 `~/.claude/skills/` 에 심볼릭 링크로 연결하세요.
-
-### 전체 설치
+### 전체 설치 (모든 스킬을 `~/.claude/skills/` 또는 `~/.agents/skills/` 에 심볼릭 링크)
 
 ```bash
 git clone https://github.com/hackertaco/skill-forge.git ~/skill-forge
+
+# Claude Code 유저
 for skill in ~/skill-forge/*/; do
   name=$(basename "$skill")
-  [ -d "$name" ] && [ ! -L "$HOME/.claude/skills/$name" ] && \
-    ln -s "$skill" "$HOME/.claude/skills/$name"
+  [ ! -L "$HOME/.claude/skills/$name" ] && ln -s "$skill" "$HOME/.claude/skills/$name"
+done
+
+# Codex 유저
+for skill in ~/skill-forge/*/; do
+  name=$(basename "$skill")
+  [ ! -L "$HOME/.agents/skills/$name" ] && ln -s "$skill" "$HOME/.agents/skills/$name"
 done
 ```
 
@@ -21,7 +56,17 @@ done
 
 ```bash
 git clone https://github.com/hackertaco/skill-forge.git ~/skill-forge
-ln -s ~/skill-forge/slide-ko-polish ~/.claude/skills/slide-ko-polish
+ln -s ~/skill-forge/slide-ko-polish ~/.claude/skills/slide-ko-polish    # Claude
+# 또는
+ln -s ~/skill-forge/slide-ko-polish ~/.agents/skills/slide-ko-polish    # Codex
+```
+
+### 심볼릭 링크 없이 직접 호출
+
+bash 스크립트라 어디서든 실행 가능:
+
+```bash
+~/skill-forge/slide-ko-polish/verify.sh slide.html
 ```
 
 ## 수록 스킬
@@ -30,32 +75,76 @@ ln -s ~/skill-forge/slide-ko-polish ~/.claude/skills/slide-ko-polish
 
 영어 → 한국어로 번역된 발표 슬라이드를 자연스러운 한국어로 다듬는다.
 
-- **Stage 1** 번역체 11시그널 regex 스캔
-- **Stage 1.5** HTML 구조 + 조사·수식어 + `<br />` 패턴 검사
-- **Stage 2** 브라우저 스크린샷 안내
-- **Stage 3** 입말 테스트 안내
-- **Stage 4** Claude CLI로 LLM Fresh Review — regex로 못 잡는 어색함 검출
+**4단계 검증:**
 
-`polish-loop.sh` 로 PASS까지 자동 반복 가능.
+| Stage | 검사 내용 | 자동/수동 |
+|---|---|---|
+| 1 | 번역체 11시그널 regex 스캔 (`~기 전에`, `~을 통해`, `그것` 등) | 자동 |
+| 1.5 | HTML 구조 (CSS, max-width) + 조사·수식어 + `<br />` 분리 패턴 | 자동 |
+| 2 | 브라우저 스크린샷 명령어 출력 | 수동 (눈) |
+| 3 | 입말 테스트 안내 | 수동 (입) |
+| 4 | LLM Fresh Review — regex로 못 잡는 어색함, 영어 직역 은유, 제목↔본문 호응 | 자동 (CLI 감지) |
+
+**기본 사용:**
 
 ```bash
 # 한 번 검증
-~/.claude/skills/slide-ko-polish/verify.sh slide.html
+~/skill-forge/slide-ko-polish/verify.sh slide.html
 
-# PASS 까지 자동 루프 (max 5회)
-~/.claude/skills/slide-ko-polish/polish-loop.sh slide.html
+# PASS 까지 자동 루프 (max 5회) — Stage 4 발견 사항을 LLM이 자동 수정
+~/skill-forge/slide-ko-polish/polish-loop.sh slide.html
+```
+
+**LLM CLI 명시:**
+
+```bash
+# 자동 감지 (claude → codex → gemini 순)
+verify.sh slide.html
+
+# 명시적 지정
+LLM_CLI=claude verify.sh slide.html
+LLM_CLI=codex  verify.sh slide.html
+LLM_CLI=gemini verify.sh slide.html
 ```
 
 **요구사항:**
-- LLM CLI 중 하나 (Stage 4 — 자동 LLM 검토)
-  - `claude` (Anthropic Claude Code) — 기본
-  - `codex` (OpenAI Codex) — 자동 fallback
-  - `gemini` (Google Gemini CLI) — 자동 fallback
-  - 수동 지정: `LLM_CLI=codex verify.sh slide.html`
-- `agent-browser` (Stage 2 — 시각 검증, 옵션)
-- `perl` (텍스트 추출, macOS·Linux 기본 탑재)
 
-**Claude Code 외부 환경에서도 사용 가능** — bash 스크립트가 CLI 자동 감지해서 어떤 LLM이든 동작.
+- LLM CLI 중 하나 (Stage 4용)
+  - `claude` — [Anthropic Claude Code](https://claude.com/claude-code)
+  - `codex` — [OpenAI Codex CLI](https://github.com/openai/codex)
+  - `gemini` — [Google Gemini CLI](https://github.com/google-gemini/gemini-cli)
+- `perl` (텍스트 추출, macOS·Linux 기본 탑재)
+- `agent-browser` (옵션, Stage 2 시각 검증용)
+
+## 아키텍처
+
+```
+사용자 호출
+   │
+   ▼
+verify.sh ──► Stage 1   regex 번역체 11시그널
+   │     ──► Stage 1.5 HTML 구조 + <br /> 분리 패턴
+   │     ──► Stage 2   스크린샷 명령어 안내
+   │     ──► Stage 3   입말 테스트 안내
+   │     ──► Stage 4   ┌─ claude --print --effort low      (감지: claude 우선)
+   │                   ├─ codex exec --skip-git-repo-check (codex 차순위)
+   │                   └─ gemini --non-interactive         (gemini 최종)
+   ▼
+PASS / WARN / FAIL
+```
+
+`polish-loop.sh` 는 verify.sh를 반복 실행하며 Stage 4 발견 사항을 LLM이 자동 수정 → Stage 4 PASS 되면 종료. 최대 반복 횟수는 인자로 조정 가능.
+
+## 새 스킬 추가하기
+
+```bash
+cd ~/skill-forge
+mkdir my-new-skill
+# SKILL.md (frontmatter: name, description) + 스크립트 작성
+git add my-new-skill && git commit -m "feat: my-new-skill 추가" && git push
+```
+
+심볼릭 링크가 이미 걸려있으면 `~/.claude/skills/` 에 자동 등록됨.
 
 ## 라이선스
 
