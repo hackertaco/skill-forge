@@ -7,21 +7,33 @@
 ## Quickstart — 다른 사람이 쓰는 법
 
 ```bash
-# 클론 + 심볼릭 링크
-git clone https://github.com/hackertaco/skill-forge.git ~/skill-forge
-ln -s ~/skill-forge/slide-ko-polish ~/.claude/skills/slide-ko-polish
+# 1. 클론
+git clone https://github.com/hackertaco/skill-forge.git
+cd skill-forge
 
-# Claude 유저 (자동 감지: claude 우선)
-~/.claude/skills/slide-ko-polish/verify.sh slide.html
+# 2. 검증 실행 (LLM CLI 자동 감지: claude → codex → gemini 순)
+./slide-ko-polish/verify.sh path/to/slide.html
 
-# Codex 유저
-LLM_CLI=codex ~/skill-forge/slide-ko-polish/verify.sh slide.html
+# 3. LLM CLI 강제 지정 (override)
+LLM_CLI=claude  ./slide-ko-polish/verify.sh path/to/slide.html
+LLM_CLI=codex   ./slide-ko-polish/verify.sh path/to/slide.html
+LLM_CLI=gemini  ./slide-ko-polish/verify.sh path/to/slide.html
 
-# Gemini 유저
-LLM_CLI=gemini ~/skill-forge/slide-ko-polish/verify.sh slide.html
+# 4. PASS까지 자동 루프 (max 5회)
+./slide-ko-polish/polish-loop.sh path/to/slide.html
 ```
 
-bash 스크립트라 심볼릭 링크 안 걸어도 절대 경로로 그냥 호출 가능. `LLM_CLI` 환경변수는 자동 감지 우선순위(`claude → codex → gemini`)를 무시하고 강제 지정.
+`path/to/slide.html` 자리는 본인 슬라이드 파일 상대 경로. 절대경로도 됨.
+
+### (옵션) Claude Code에서 슬래시 명령으로 호출하려면 심볼릭 링크
+
+위 Quickstart는 어떤 환경이든 동작합니다. Claude Code에서 트리거 키워드("발표자료 다듬어")나 `/slide-ko-polish` 명령으로 호출하고 싶으면 심볼릭 링크 추가:
+
+```bash
+# 레포 폴더 안에서
+ln -s "$(pwd)/slide-ko-polish" ~/.claude/skills/slide-ko-polish    # Claude Code
+ln -s "$(pwd)/slide-ko-polish" ~/.agents/skills/slide-ko-polish    # Codex
+```
 
 ## 지원 환경
 
