@@ -47,9 +47,15 @@ ln -s ~/skill-forge/slide-ko-polish ~/.claude/skills/slide-ko-polish
 ```
 
 **요구사항:**
-- `claude` CLI (Stage 4 — 자동 LLM 검토)
+- LLM CLI 중 하나 (Stage 4 — 자동 LLM 검토)
+  - `claude` (Anthropic Claude Code) — 기본
+  - `codex` (OpenAI Codex) — 자동 fallback
+  - `gemini` (Google Gemini CLI) — 자동 fallback
+  - 수동 지정: `LLM_CLI=codex verify.sh slide.html`
 - `agent-browser` (Stage 2 — 시각 검증, 옵션)
 - `perl` (텍스트 추출, macOS·Linux 기본 탑재)
+
+**Claude Code 외부 환경에서도 사용 가능** — bash 스크립트가 CLI 자동 감지해서 어떤 LLM이든 동작.
 
 ## 라이선스
 

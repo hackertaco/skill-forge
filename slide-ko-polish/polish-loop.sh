@@ -24,10 +24,20 @@ else
   G=; Y=; R=; B=; D=; N=
 fi
 
-if ! command -v claude >/dev/null 2>&1; then
-  echo "${R}claude CLI 필요. brew install claude 또는 npm i -g @anthropic-ai/claude-code${N}"
+# LLM CLI 자동 감지 (env LLM_CLI=claude|codex|gemini 로 override)
+LLM_CLI="${LLM_CLI:-}"
+if [ -z "$LLM_CLI" ]; then
+  if command -v claude >/dev/null 2>&1; then LLM_CLI="claude"
+  elif command -v codex >/dev/null 2>&1; then LLM_CLI="codex"
+  elif command -v gemini >/dev/null 2>&1; then LLM_CLI="gemini"
+  fi
+fi
+if [ -z "$LLM_CLI" ]; then
+  echo "${R}LLM CLI 필요: claude / codex / gemini 중 하나 설치${N}"
   exit 1
 fi
+echo "${D}LLM CLI: $LLM_CLI${N}"
+export LLM_CLI
 
 for i in $(seq 1 "$MAX_ITER"); do
   echo
@@ -79,9 +89,25 @@ $FILE
 [LLM 리뷰 발견 사항]
 $FINDINGS"
 
-  echo "$FIX_PROMPT" | claude --print --effort medium \
-    --allowed-tools "Edit Read Grep" \
-    --add-dir "$(dirname "$FILE")" 2>&1 | tail -20
+  case "$LLM_CLI" in
+    claude)
+      echo "$FIX_PROMPT" | claude --print --effort medium \
+        --allowed-tools "Edit Read Grep" \
+        --add-dir "$(dirname "$FILE")" 2>&1 | tail -20
+      ;;
+    codex)
+      # Codex CLI: 파일 편집 권한으로 실행
+      codex exec --skip-git-repo-check --cwd "$(dirname "$FILE")" "$FIX_PROMPT" 2>&1 | tail -20
+      ;;
+    gemini)
+      # Gemini CLI: 파일 편집은 별도 설정 필요할 수 있음
+      echo "$FIX_PROMPT" | gemini --non-interactive 2>&1 | tail -20
+      ;;
+    *)
+      echo "${R}지원하지 않는 LLM_CLI: $LLM_CLI${N}"
+      exit 1
+      ;;
+  esac
 
   echo
 done

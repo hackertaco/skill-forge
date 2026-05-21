@@ -183,12 +183,24 @@ echo "${B}[Stage 3] 입말 테스트 (사람)${N}"
 echo "  슬라이드 본문을 ${G}소리 내서${N} 읽으세요."
 echo "  ${D}혀가 꼬이거나 호흡이 끊기면 그 문장 재작업${N}"
 
-# ── Stage 4: LLM Fresh Review (Claude CLI) ──────────────
+# ── Stage 4: LLM Fresh Review (Claude / Codex / Gemini CLI) ──────────────
 echo
-echo "${B}[Stage 4] LLM Fresh Review (Claude API)${N}"
+echo "${B}[Stage 4] LLM Fresh Review${N}"
 echo "${D}-----------------------------------${N}"
 
-if command -v claude >/dev/null 2>&1; then
+# LLM CLI 자동 감지 — claude → codex → gemini 순. env LLM_CLI=claude|codex|gemini 로 override 가능.
+LLM_CLI="${LLM_CLI:-}"
+if [ -z "$LLM_CLI" ]; then
+  if command -v claude >/dev/null 2>&1; then
+    LLM_CLI="claude"
+  elif command -v codex >/dev/null 2>&1; then
+    LLM_CLI="codex"
+  elif command -v gemini >/dev/null 2>&1; then
+    LLM_CLI="gemini"
+  fi
+fi
+
+if [ -n "$LLM_CLI" ]; then
   # 슬라이드 텍스트 추출 — 인라인 태그는 공백 없이 제거, 블록 태그는 줄바꿈으로
   # 주의: s 연산자 delimiter는 # 사용 (alternation의 | 와 충돌 방지)
   SLIDE_TEXT=$(perl -0777 -pe '
@@ -232,8 +244,24 @@ if command -v claude >/dev/null 2>&1; then
 [슬라이드 텍스트]
 ${SLIDE_TEXT}"
 
-  echo "  ${D}Claude CLI 호출 중 (effort=low, ~10초)...${N}"
-  REVIEW=$(claude --print --effort low "$PROMPT" 2>&1 | tail -80)
+  echo "  ${D}LLM CLI 호출 중 ($LLM_CLI, ~10초)...${N}"
+  case "$LLM_CLI" in
+    claude)
+      # Anthropic Claude Code CLI
+      REVIEW=$(claude --print --effort low "$PROMPT" 2>&1 | tail -80)
+      ;;
+    codex)
+      # OpenAI Codex CLI — non-interactive exec mode
+      REVIEW=$(codex exec --skip-git-repo-check "$PROMPT" 2>&1 | tail -80)
+      ;;
+    gemini)
+      # Google Gemini CLI — non-interactive
+      REVIEW=$(echo "$PROMPT" | gemini --non-interactive 2>&1 | tail -80)
+      ;;
+    *)
+      REVIEW="(지원하지 않는 LLM_CLI: $LLM_CLI)"
+      ;;
+  esac
 
   if [ -n "$REVIEW" ]; then
     echo "$REVIEW" | sed "s|^|  |"
@@ -246,10 +274,10 @@ ${SLIDE_TEXT}"
       [ "$S15" -lt 1 ] && S15=1
     fi
   else
-    echo "  ${R}✗ Claude CLI 응답 없음${N}"
+    echo "  ${R}✗ $LLM_CLI 응답 없음${N}"
   fi
 else
-  echo "  ${D}claude CLI 없음 — Stage 4 건너뜀${N}"
+  echo "  ${D}LLM CLI 없음 (claude/codex/gemini 중 하나 설치) — Stage 4 건너뜀${N}"
 fi
 
 # ── 종합 판정 ──────────────────────────────────────────
