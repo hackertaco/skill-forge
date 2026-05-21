@@ -39,6 +39,10 @@ fi
 echo "${D}LLM CLI: $LLM_CLI${N}"
 export LLM_CLI
 
+# 수렴/사이클 검출용 상태
+PREV_FINDINGS=""
+HISTORY_FILE=$(mktemp); trap 'rm -f "$HISTORY_FILE"' EXIT
+
 for i in $(seq 1 "$MAX_ITER"); do
   echo
   echo "${B}╔═══ Iteration $i/$MAX_ITER ═══╗${N}"
@@ -47,18 +51,18 @@ for i in $(seq 1 "$MAX_ITER"); do
   # 1. verify.sh 실행, Stage 4만 추출
   OUT=$("$VERIFY" "$FILE" 2>&1)
 
-  # 2. Stage 4 결과 확인
+  # 2. Stage 4 PASS면 종료
   if echo "$OUT" | grep -q "Stage 4 PASS"; then
     echo "${G}✅ 수렴 — iteration $i 에서 Stage 4 PASS${N}"
     exit 0
   fi
 
-  # 3. Stage 4 발견 사항만 추출
+  # 3. Stage 4 발견 사항 추출 ([BLOCKING] 라벨만)
   FINDINGS=$(echo "$OUT" | awk '
     /\[Stage 4\]/ { in_s4=1; next }
     in_s4 && /━━━/ { exit }
+    in_s4 && /\[BLOCKING\]/ { print }
     in_s4 && /^  - / { print }
-    in_s4 && /^    /  { print }
   ')
 
   if [ -z "$FINDINGS" ]; then
@@ -69,6 +73,37 @@ for i in $(seq 1 "$MAX_ITER"); do
   echo "${D}─── LLM 발견 사항 ───${N}"
   echo "$FINDINGS"
   echo
+
+  # 4. 수렴 검출: 이번 발견이 직전과 50% 이상 겹치면 STOP
+  if [ -n "$PREV_FINDINGS" ]; then
+    # 발견 텍스트 정규화 후 라인 단위로 비교
+    PREV_NORM=$(echo "$PREV_FINDINGS" | sort -u)
+    THIS_NORM=$(echo "$FINDINGS" | sort -u)
+    OVERLAP=$(comm -12 <(echo "$PREV_NORM") <(echo "$THIS_NORM") | wc -l | tr -d ' ')
+    TOTAL=$(echo "$THIS_NORM" | wc -l | tr -d ' ')
+    if [ "$TOTAL" -gt 0 ] && [ "$((OVERLAP * 2))" -ge "$TOTAL" ]; then
+      echo "${Y}━━━ 수렴 검출: 직전과 ${OVERLAP}/${TOTAL} 동일 — 같은 자리 트집. 종료. ━━━${N}"
+      exit 0
+    fi
+  fi
+
+  # 5. 사이클 검출: A→B 추천이 과거 B→A로 등장했으면 STOP
+  THIS_PAIRS=$(echo "$FINDINGS" | grep -oE '"[^"]+"[[:space:]]*→[[:space:]]*"[^"]+"' || true)
+  if [ -n "$THIS_PAIRS" ]; then
+    while IFS= read -r pair; do
+      [ -z "$pair" ] && continue
+      from=$(echo "$pair" | sed -E 's/^"([^"]+)".*/\1/')
+      to=$(echo "$pair"   | sed -E 's/.*→[[:space:]]*"([^"]+)".*/\1/')
+      # 역방향이 history에 있으면 사이클
+      if grep -qF "\"$to\" → \"$from\"" "$HISTORY_FILE" 2>/dev/null; then
+        echo "${Y}━━━ 사이클 검출: '$from' ↔ '$to' 왔다갔다. 종료. ━━━${N}"
+        exit 0
+      fi
+      echo "\"$from\" → \"$to\"" >> "$HISTORY_FILE"
+    done <<< "$THIS_PAIRS"
+  fi
+
+  PREV_FINDINGS="$FINDINGS"
 
   # 4. claude CLI에 수정 요청 (Edit 도구 허용)
   echo "${D}─── 자동 수정 적용 ───${N}"
